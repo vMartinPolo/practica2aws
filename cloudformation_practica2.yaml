@@ -1,0 +1,164 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Practice2
+
+Parameters:
+  # AMI
+  AmiId:
+    Type: String
+    Default: ami-04505e74c0741db8d
+    Description: Select ami to deploy app
+  DBInstanceId:
+    Description: Db Instance Identifier
+    Type: String
+    Default: events
+  DBName:
+    Description: Db Instance Identifier
+    Type: String
+    Default: events_db
+  DBInstanceClass:
+    Description: Instance type for db
+    Type: String
+    Default: db.t2.micro
+  DBPassword:
+    Description: Database password
+    Type: String
+    NoEcho: true
+  S3BucketName:
+    Type: String
+    Description: The name for the S3 bucket
+  DownloadUrl:
+    Type: String
+    Default: https://s3.amazonaws.com/master.cloud.app.practica2/i.huertas.2021-v.martinp.2021-0.0.1-SNAPSHOT.jar
+    AllowedValues:
+      - https://s3.amazonaws.com/mca.cloud.practica-2/practica_1_cloud_ordinaria.jar
+      - https://s3.amazonaws.com/master.cloud.app.practica2/i.huertas.2021-v.martinp.2021-0.0.1-SNAPSHOT.jar
+    Description: Select url to download app
+  KeyName:
+    Description: The EC2 Key Pair to allow SSH access to the instance
+    Type: 'AWS::EC2::KeyPair::KeyName'
+
+Resources: 
+  # Security group for EC2
+  ec2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: sgEC2
+      GroupDescription: "SG for app with egress port 443"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+  # Security group for RDS
+  rdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: sgRDS
+      GroupDescription: "SG for RDS only accessible from sgEC2"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          SourceSecurityGroupName: !Ref ec2SecurityGroup # Sólo permite acceso a las instancias de este grupo
+  # S3 bucket
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3BucketName
+      AccessControl: PublicRead
+  S3WritableRole: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies: 
+        - PolicyName: "bucketPolicy"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: "Allow"
+                Action: "s3:*"
+                Resource:
+                - !Sub arn:aws:s3:::${S3BucketName}/*
+        - PolicyName: "rdsPolicy"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: "Allow"
+                Action: "rds:*"
+                Resource: "*"
+  # IAM role with access only to our S3 bucket
+  EC2InstanceRole:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref S3WritableRole
+  # EC2 instance
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - rdsDBInstance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: "t2.micro"
+      IamInstanceProfile: !Ref EC2InstanceRole
+      Monitoring: true
+      SecurityGroups:
+        - !Ref ec2SecurityGroup
+      KeyName: !Ref KeyName
+      UserData: 
+        Fn::Base64: 
+          Fn::Sub: 
+            - |
+              #!/bin/bash -ex
+              apt-get update && apt-get install -y openjdk-17-jre-headless
+              wget ${url}
+              sudo java -jar -Dspring.profiles.active=production -Dserver.port=443 i.huertas.2021-v.martinp.2021-0.0.1-SNAPSHOT.jar  --cloud.aws.rds.dbInstanceIdentifier=${dbInstance} --cloud.aws.rds.events.password=${dbPassword} --cloud.aws.s3.bucket=${S3BucketName}
+            - url: !Ref DownloadUrl
+              dbInstance: !Ref DBInstanceId
+              dbPassword: !Ref DBPassword
+              S3BucketName: !Ref S3BucketName
+      Tags:
+        - Key: Name
+          Value: Practica2-VirginiaIsaac
+  # RDS instance
+  rdsDBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: 10
+      AllowMajorVersionUpgrade: false
+      AutoMinorVersionUpgrade: true
+      DBInstanceIdentifier: !Ref DBInstanceId
+      DBName: !Ref DBName
+      Engine: mysql
+      EngineVersion: 5.7.36
+      MasterUsername: root
+      MasterUserPassword: !Ref DBPassword
+      MultiAZ: false
+      PubliclyAccessible: true
+      StorageEncrypted: false
+      VPCSecurityGroups:
+        - !GetAtt rdsSecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: Practica2-VirginiaIsaac
+# Outputs
+Outputs:
+  WebSiteURL:
+    Value: !Join
+        - ''
+        - - "https://"
+          - !GetAtt EC2Instance.PublicDnsName
+          - ":443"
+          - "/api/events/"
+    Description: "Practica2-VirginiaeIsaac"
