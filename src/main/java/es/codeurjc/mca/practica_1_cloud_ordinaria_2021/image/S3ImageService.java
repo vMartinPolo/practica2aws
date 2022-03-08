@@ -31,64 +31,17 @@ public class S3ImageService implements ImageService {
 	
 	public static S3Client s3;
 	
-	@Value("${amazon.s3.bucket-name}")
+	@Value("${cloud.aws.s3.bucket}")
 	private String bucketName;	
 	
-
 	public S3ImageService() {
 		s3 = S3Client.builder()
-	            .region(Region.EU_WEST_1)
+	            .region(Region.US_EAST_1)
 	            .build(); 
 	}
 	
-//	//Function to check if a bucket already exists
-//	public static boolean bucketExists(S3Client s3, String bucketName) {
-//		HeadBucketRequest headBucketRequest = HeadBucketRequest.builder()
-//	            .bucket(bucketName)
-//	            .build();
-//
-//	    try {
-//	        s3.headBucket(headBucketRequest);
-//	        return true;
-//	    } catch (NoSuchBucketException e) {
-//	        return false;
-//	    }
-//	}
-	
-//	// Create a bucket by using a S3Waiter object
-//    public static void createBucket(S3Client s3Client, String bucketName) {
-//
-//        try {
-//        	
-//            S3Waiter s3Waiter = s3Client.waiter();
-//             CreateBucketRequest bucketRequest = CreateBucketRequest.builder()
-//                    .bucket(bucketName)
-//                    .build();
-//
-//            s3Client.createBucket(bucketRequest);
-//            HeadBucketRequest bucketRequestWait = HeadBucketRequest.builder()
-//                    .bucket(bucketName)
-//                    .build();
-//
-//            // Wait until the bucket is created and print out the response
-//            WaiterResponse<HeadBucketResponse> waiterResponse = s3Waiter.waitUntilBucketExists(bucketRequestWait);
-//            waiterResponse.matched().response().ifPresent(System.out::println);
-//            System.out.println(bucketName +" is ready");
-//
-//        } catch (S3Exception e) {
-//            System.err.println(e.awsErrorDetails().errorMessage());
-//            System.exit(1);
-//        }
-//    }
-
     @Override
     public String createImage(MultipartFile multiPartFile) {
-//    	// Check if bucket already exists
-//    	boolean be = bucketExists(s3,bucketName);
-//    	// If bucket doesn't exist, create the bucket
-//    	if (be == false) {
-//	    	createBucket(s3,bucketName);
-//    	}
     	// Upload the file
     	String fileName = multiPartFile.getOriginalFilename();
         File file = new File(System.getProperty("java.io.tmpdir")+"/"+fileName);
